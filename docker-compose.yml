@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  db:
+    image: phidata/pgvector:16
+    container_name: pgvector
+    environment:
+      POSTGRES_DB: ai
+      POSTGRES_USER: ai
+      POSTGRES_PASSWORD: ai
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgvolume:/var/lib/postgresql/data
+    ports:
+      - "5532:5432"
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://ai:ai@db:5432/ai
+    ports:
+      - "8000:8000"  # (optional if your app runs on a server)
+    command: python autorag.py  # optional override
+
+volumes:
+  pgvolume:

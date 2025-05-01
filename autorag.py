@@ -99,7 +99,7 @@ def main():
     autonomous retrieval-augmented generation (RAG) assistant based on GPT-4o.
     
     The app allows users to upload PDF documents to enhance the knowledge base and
-    submit questions to receive generated responses.
+    submit questions to receive generated responses. 
 
     Side Effects:
         - Configures Streamlit page and title.
