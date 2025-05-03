@@ -6,10 +6,10 @@ WORKDIR /app
 
 # Copy the requirements file and install dependencies
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of your project files
 COPY . .
 
 # Run your app
-CMD ["python", "autorag.py"]
+CMD ["streamlit", "run", "autorag.py", "--server.port=8000", "--server.address=0.0.0.0"]

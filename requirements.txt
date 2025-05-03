@@ -1,7 +1,7 @@
 streamlit 
 agno
 openai
-psycopg-binary
+psycopg[binary]
 pgvector
 requests
 sqlalchemy
