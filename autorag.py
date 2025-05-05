@@ -5,10 +5,14 @@ from agno.agent import Agent
 from agno.document.reader.pdf_reader import PDFReader
 from agno.models.openai import OpenAIChat
 from agno.knowledge.pdf_url import PDFUrlKnowledgeBase
+from agno.knowledge.text import TextKnowledgeBase
 from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.embedder.openai import OpenAIEmbedder
-from agno.vectordb.pgvector import PgVector, SearchType
+from agno.vectordb.pgvector import PgVector
 from agno.storage.agent.postgres import PostgresAgentStorage
+from agno.knowledge.combined import CombinedKnowledgeBase
+from pathlib import Path
+
 
 # Apply nest_asyncio to allow nested event loops, required for running async functions in Streamlit
 nest_asyncio.apply()
@@ -32,20 +36,50 @@ def setup_assistant(api_key: str) -> Agent:
     Returns:
         Agent: An initialized Assistant agent configured with a language model, 
         knowledge base, storage, and additional tools for enhanced functionality."""
+    
+
+    pdf_kb = PDFUrlKnowledgeBase(
+        vector_db=PgVector(
+            table_name="auto_rag_docs",  
+            db_url=DB_URL,  
+            embedder=OpenAIEmbedder(id="text-embedding-ada-002", dimensions=1536, api_key=api_key),
+        ),
+        num_documents=3,
+    )
+
+    text_kb = TextKnowledgeBase(
+        path=Path("data/text_docs"),  # Directory where .txt files will be stored
+        vector_db=PgVector(
+            table_name="auto_rag_text",  # Separate table for text knowledge
+            db_url=DB_URL,
+            embedder=OpenAIEmbedder(id="text-embedding-ada-002", dimensions=1536, api_key=api_key),
+        ),
+        num_documents=3,
+    )
+
+    # Combine knowledge bases
+    knowledge_base = CombinedKnowledgeBase(
+        sources=[
+            pdf_kb,
+            text_kb
+        ],
+        vector_db=PgVector(
+            table_name="combined_documents",
+            db_url=DB_URL,
+            embedder=OpenAIEmbedder(id="text-embedding-ada-002", dimensions=1536, api_key=api_key),
+        ),
+    )
+    # Load the knowledge base
+    knowledge_base.load(recreate=False)
+
     llm = OpenAIChat(id="gpt-4o-mini", api_key=api_key)
+
     # Set up the Assistant with storage, knowledge base, and tools
     return Agent(
         name="auto_rag_agent",  # Name of the Assistant
         model=llm,  # Language model to be used
         storage=PostgresAgentStorage(table_name="auto_rag_storage", db_url=DB_URL),  
-        knowledge=PDFUrlKnowledgeBase(
-            vector_db=PgVector(
-                table_name="auto_rag_docs",  
-                db_url=DB_URL,  
-                embedder=OpenAIEmbedder(id="text-embedding-ada-002", dimensions=1536, api_key=api_key),  
-            ),
-            num_documents=3,  
-        ),
+        knowledge=knowledge_base,
         tools=[DuckDuckGoTools()],  # Additional tool for web search via DuckDuckGo
         instructions=[
             "Search your knowledge base first.",  
@@ -77,6 +111,17 @@ def add_document(agent: Agent, file: BytesIO):
         st.success("Document added to the knowledge base.")
     else:
         st.error("Failed to read the document.")
+
+def add_text_document(file):
+    """Reads a TXT file and adds its content to the text knowledge base."""
+    target_dir = Path("data/text_docs")
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = target_dir / file.name
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(file.read().decode("utf-8"))
+
+    st.success("Text file added to the knowledge base. Reload page to use it.")
 
 # Function to query the Assistant and return a response
 def query_assistant(agent: Agent, question: str) -> str:
@@ -120,10 +165,16 @@ def main():
 
     assistant = setup_assistant(api_key)
     
-    uploaded_file = st.sidebar.file_uploader("📄 Upload PDF", type=["pdf"])
-    
+    uploaded_file = st.sidebar.file_uploader("📄 Upload PDF or TXT", type=["pdf", "txt"])
+
     if uploaded_file and st.sidebar.button("🛠️ Add to Knowledge Base"):
-        add_document(assistant, BytesIO(uploaded_file.read()))
+        file_type = uploaded_file.name.split(".")[-1].lower()
+        if file_type == "pdf":
+            add_document(assistant, BytesIO(uploaded_file.read()))
+        elif file_type == "txt":
+            add_text_document(uploaded_file)
+        else:
+            st.error("Unsupported file type.")
 
     question = st.text_input("💬 Ask Your Question:")
     
