@@ -8,3 +8,4 @@ sqlalchemy
 pypdf
 duckduckgo-search
 nest_asyncio
+mcp
